@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Coursera Gemini Solver Settings</title>
+    <link rel="stylesheet" href="../styles/global.css">
+    <link rel="stylesheet" href="settings.css">
+</head>
+<body>
+    <div class="settings-container">
+        <h1><span data-i18n="settingsTitle">Extension Settings</span></h1>
+        <p><span data-i18n="settingsDescription">Manage how the Coursera Gemini Solver extension behaves.</span></p>
+
+        <div class="card">
+            <h2><span data-i18n="generalSettings">General Settings</span></h2>
+            <div class="setting-item">
+                <label for="autoSolveToggle"><span data-i18n="settingAutoSolve">Automatically Solve Quizzes:</span></label>
+                <input type="checkbox" id="autoSolveToggle">
+                <span class="toggle-switch-base"></span>
+            </div>
+            <div class="setting-item">
+                <label for="explanationToggle"><span data-i18n="settingShowExplanations">Show Answer Explanations:</span></label>
+                <input type="checkbox" id="explanationToggle">
+                <span class="toggle-switch-base"></span>
+            </div>
+            <div class="setting-item">
+                <label for="delayBeforeSolve"><span data-i18n="settingSolveDelay">Delay Before Solving (ms):</span></label>
+                <input type="number" id="delayBeforeSolve" min="0" value="500">
+            </div>
+            <div class="setting-item">
+                <label for="confidenceThreshold"><span data-i18n="settingMinConfidence">Minimum Confidence Threshold:</span></label>
+                <input type="range" id="confidenceThreshold" min="0" max="100" value="70">
+                <span id="confidenceValue">70%</span>
+            </div>
+        </div>
+
+        <div class="card">
+            <h2><span data-i18n="apiKeyManagement">API Key Management</span></h2>
+            <p><span data-i18n="apiKeyInstructions">Your Gemini API key is required for solving questions. Get one from </span><a href="https://makersuite.google.com/app/apikey" target="_blank">Google AI Studio</a>.</p>
+            <label for="geminiApiKey"><span data-i18n="apiKeyLabel">Gemini API Key:</span></label>
+            <input type="password" id="geminiApiKey" placeholder="Enter your Gemini API Key">
+            <button id="saveApiKeyBtn"><span data-i18n="saveKeyButton">Save API Key</span></button>
+            <div id="apiKeyStatus" class="status-message text-center"></div>
+        </div>
+
+        <div class="card">
+            <h2><span data-i18n="cacheManagement">Cache Management</span></h2>
+            <p><span data-i18n="cacheDescription">Clear local cache of solved questions to free up space or re-solve.</span></p>
+            <button id="clearCacheBtn" class="clear-button"><span data-i18n="clearCacheButton">Clear Solved Questions Cache</span></button>
+            <div id="cacheStatus" class="status-message text-center"></div>
+        </div>
+        
+        <div class="footer text-center">
+            <p><span data-i18n="versionInfo">Version:</span> 1.0.0</p>
+        </div>
+    </div>
+
+    <!-- All script tags updated with type="module" -->
+    <script src="../utils/constants.js" type="module"></script>
+    <script src="../utils/error_handler.js" type="module"></script>
+    <script src="../utils/storage_manager.js" type="module"></script>
+    <script src="../utils/cache_manager.js" type="module"></script>
+    <script src="settings.js" type="module"></script>
+</body>
+</html>

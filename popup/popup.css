@@ -1,0 +1,187 @@
+/* popup/popup.css */
+
+body {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    width: 300px;
+    padding: 15px;
+    background-color: #f7f9fc;
+    color: #333;
+    margin: 0;
+    box-sizing: border-box;
+}
+
+.container {
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+}
+
+h1 {
+    font-size: 20px;
+    color: #2c3e50;
+    margin-top: 0;
+    margin-bottom: 10px;
+    text-align: center;
+}
+
+h2 {
+    font-size: 16px;
+    color: #34495e;
+    border-bottom: 1px solid #eee;
+    padding-bottom: 5px;
+    margin-bottom: 10px;
+}
+
+/* API Key Section */
+.api-key-section label {
+    display: block;
+    margin-bottom: 5px;
+    font-weight: bold;
+}
+
+.api-key-section input[type="password"] {
+    width: calc(100% - 18px);
+    padding: 8px;
+    margin-bottom: 10px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    box-sizing: border-box;
+}
+
+.api-key-section button {
+    width: 100%;
+    padding: 10px;
+    background-color: #4CAF50;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 14px;
+}
+
+.api-key-section button:hover {
+    background-color: #45a049;
+}
+
+/* Status Messages */
+.status-message {
+    margin-top: 5px;
+    font-size: 13px;
+    text-align: center;
+    padding: 5px;
+    border-radius: 3px;
+}
+
+.status-message.success {
+    background-color: #e6ffe6;
+    color: #28a745;
+    border: 1px solid #28a745;
+}
+
+.status-message.error {
+    background-color: #ffe6e6;
+    color: #dc3545;
+    border: 1px solid #dc3545;
+}
+
+/* Settings Section */
+.setting-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 10px;
+}
+
+.setting-item label {
+    flex-grow: 1;
+    margin-right: 10px;
+}
+
+.setting-item input[type="checkbox"] {
+    position: absolute;
+    opacity: 0;
+    width: 0;
+    height: 0;
+}
+
+/* Toggle Switch Styling */
+.toggle-switch {
+    position: relative;
+    display: inline-block;
+    width: 36px;
+    height: 20px;
+    background-color: #ccc;
+    border-radius: 10px;
+    transition: background-color 0.3s;
+    cursor: pointer;
+}
+
+.toggle-switch::before {
+    content: '';
+    position: absolute;
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    background-color: white;
+    top: 2px;
+    left: 2px;
+    transition: transform 0.3s;
+}
+
+.setting-item input[type="checkbox"]:checked + .toggle-switch {
+    background-color: #4CAF50;
+}
+
+.setting-item input[type="checkbox"]:checked + .toggle-switch::before {
+    transform: translateX(16px);
+}
+
+.setting-item input[type="range"] {
+    width: 100px;
+    margin-left: 10px;
+}
+
+.setting-item input[type="number"] {
+    width: 60px;
+    padding: 4px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+}
+
+/* Action Section */
+.action-section button {
+    width: 100%;
+    padding: 10px;
+    background-color: #007bff;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 14px;
+}
+
+.action-section button:hover:not(:disabled) {
+    background-color: #0056b3;
+}
+
+.action-section button:disabled {
+    background-color: #cccccc;
+    cursor: not-allowed;
+}
+
+/* Footer */
+.footer {
+    text-align: center;
+    margin-top: 15px;
+    font-size: 12px;
+    color: #666;
+}
+
+.footer a {
+    color: #007bff;
+    text-decoration: none;
+}
+
+.footer a:hover {
+    text-decoration: underline;
+}

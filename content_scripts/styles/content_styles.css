@@ -1,0 +1,170 @@
+/* content_scripts/styles/content_styles.css */
+
+/* --- Global Toast Messages (top right) --- */
+#gemini-solver-toast {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    background-color: #333;
+    color: white;
+    padding: 10px 20px;
+    border-radius: 5px;
+    z-index: 10000; /* High z-index to be on top */
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity 0.3s ease-in-out, visibility 0.3s ease-in-out;
+    font-size: 14px;
+    box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+}
+
+#gemini-solver-toast.gs-toast--show {
+    opacity: 1;
+    visibility: visible;
+}
+
+#gemini-solver-toast.gs-toast--info { background-color: #007bff; }
+#gemini-solver-toast.gs-toast--success { background-color: #28a745; }
+#gemini-solver-toast.gs-toast--error { background-color: #dc3545; }
+#gemini-solver-toast.gs-toast--warning { background-color: #ffc107; color: #333;}
+
+
+/* --- Question-Specific Tooltips --- */
+.gs-tooltip {
+    position: absolute;
+    top: -30px; /* Position above the element */
+    left: 50%;
+    transform: translateX(-50%);
+    background-color: #555;
+    color: white;
+    padding: 5px 10px;
+    border-radius: 4px;
+    font-size: 12px;
+    white-space: nowrap;
+    z-index: 9999;
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity 0.3s ease-in-out, visibility 0.3s ease-in-out;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+}
+
+.gs-tooltip.gs-tooltip--show {
+    opacity: 1;
+    visibility: visible;
+}
+
+.gs-tooltip--info { background-color: #007bff; }
+.gs-tooltip--success { background-color: #28a745; }
+.gs-tooltip--error { background-color: #dc3545; }
+.gs-tooltip--warning { background-color: #ffc107; color: #333; }
+
+/* Arrow for tooltip */
+.gs-tooltip::after {
+    content: "";
+    position: absolute;
+    top: 100%;
+    left: 50%;
+    margin-left: -5px;
+    border-width: 5px;
+    border-style: solid;
+    border-color: #555 transparent transparent transparent;
+}
+.gs-tooltip--info::after { border-color: #007bff transparent transparent transparent; }
+.gs-tooltip--success::after { border-color: #28a745 transparent transparent transparent; }
+.gs-tooltip--error::after { border-color: #dc3545 transparent transparent transparent; }
+.gs-tooltip--warning::after { border-color: #ffc107 transparent transparent transparent; }
+
+
+/* --- Question Status Indicators --- */
+/* Base for question containers that get marked */
+.rc-QuizQuestion {
+    position: relative; /* Ensure positioning context for internal elements */
+    padding-right: 30px; /* Make space for status icons */
+    transition: background-color 0.3s ease;
+}
+
+.gs-processing {
+    background-color: #e0f2f7 !important; /* Light blue for processing */
+    border: 1px dashed #007bff;
+}
+
+.gs-spinner {
+    position: absolute;
+    right: 5px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 20px;
+    height: 20px;
+    display: none; /* Controlled by JS */
+}
+
+.gs-solved {
+    /* Base style for any solved state */
+}
+
+.gs-success {
+    background-color: #e6ffe6 !important; /* Light green for success */
+    border: 1px solid #28a745;
+}
+
+.gs-error {
+    background-color: #ffe6e6 !important; /* Light red for error */
+    border: 1px solid #dc3545;
+}
+
+.gs-warning {
+    background-color: #fff8e1 !important; /* Light yellow for warning (e.g., low confidence) */
+    border: 1px solid #ffc107;
+}
+
+.gs-status-icon {
+    position: absolute;
+    right: 5px;
+    top: 50%;
+    transform: translateY(-50%);
+    font-size: 18px;
+    font-weight: bold;
+    line-height: 1;
+    display: none; /* Controlled by JS */
+}
+
+/* --- Answer Highlights and Selections --- */
+/* For radio/checkbox labels which are the clickable areas */
+.rc-RadioChoice__label.gs-selected-answer,
+.rc-CheckboxChoice__label.gs-selected-answer {
+    background-color: #d4edda !important; /* Light green background */
+    border: 1px solid #28a745;
+    border-radius: 4px;
+    padding: 8px 12px;
+    transition: background-color 0.3s ease;
+}
+
+.rc-RadioChoice__label.gs-highlighted-answer,
+.rc-CheckboxChoice__label.gs-highlighted-answer {
+    background-color: #ffeeba !important; /* Light yellow background for highlight */
+    border: 1px dashed #ffc107;
+    border-radius: 4px;
+    padding: 8px 12px;
+    transition: background-color 0.3s ease;
+}
+
+/* Ensure Coursera's default styles are overridden if necessary for visibility */
+.rc-RadioChoice__label, .rc-CheckboxChoice__label {
+    box-shadow: none !important; /* Remove any conflicting shadows */
+}
+
+
+/* --- Explanation Display --- */
+.gs-explanation {
+    margin-top: 15px;
+    padding: 10px;
+    background-color: #e9f7fe; /* Light blue background for explanation */
+    border: 1px solid #007bff;
+    border-radius: 5px;
+    font-size: 14px;
+    color: #333;
+    display: none; /* Controlled by JS */
+}
+
+.gs-explanation strong {
+    color: #0056b3;
+}

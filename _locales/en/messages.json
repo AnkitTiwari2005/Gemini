@@ -1,0 +1,90 @@
+{
+  "settingsTitle": {
+    "message": "Coursera Gemini Solver Settings",
+    "description": "Title for the settings page"
+  },
+  "settingsDescription": {
+    "message": "Manage how the Coursera Gemini Solver extension behaves.",
+    "description": "Description text for the settings page"
+  },
+  "generalSettings": {
+    "message": "General Settings",
+    "description": "Heading for general settings section"
+  },
+  "settingAutoSolve": {
+    "message": "Automatically Solve Quizzes:",
+    "description": "Label for auto-solve toggle"
+  },
+  "settingShowExplanations": {
+    "message": "Show Answer Explanations:",
+    "description": "Label for show explanations toggle"
+  },
+  "settingSolveDelay": {
+    "message": "Delay Before Solving (ms):",
+    "description": "Label for solve delay input"
+  },
+  "settingMinConfidence": {
+    "message": "Minimum Confidence Threshold:",
+    "description": "Label for minimum confidence slider"
+  },
+  "apiKeyManagement": {
+    "message": "API Key Management",
+    "description": "Heading for API key management section"
+  },
+  "apiKeyInstructions": {
+    "message": "Your Gemini API key is required for solving questions. Get one from ",
+    "description": "Instructions for getting API key"
+  },
+  "apiKeyLabel": {
+    "message": "Gemini API Key:",
+    "description": "Label for API key input"
+  },
+  "saveKeyButton": {
+    "message": "Save API Key",
+    "description": "Button text for saving API key"
+  },
+  "cacheManagement": {
+    "message": "Cache Management",
+    "description": "Heading for cache management section"
+  },
+  "cacheDescription": {
+    "message": "Clear local cache of solved questions to free up space or re-solve.",
+    "description": "Description for cache management"
+  },
+  "clearCacheButton": {
+    "message": "Clear Solved Questions Cache",
+    "description": "Button text for clearing cache"
+  },
+  "versionInfo": {
+    "message": "Version:",
+    "description": "Label for version information"
+  },
+  "apiKeyEmptyError": {
+    "message": "API Key cannot be empty.",
+    "description": "Error message for empty API key"
+  },
+  "apiKeyInvalidFormatError": {
+    "message": "Invalid API Key format. Must start with \"AIza\".",
+    "description": "Error message for invalid API key format"
+  },
+  "apiKeySavedSuccess": {
+    "message": "API Key saved successfully!",
+    "description": "Success message after saving API key"
+  },
+  "apiKeySaveError": {
+    "message": "Error saving API key. Please try again.",
+    "description": "Generic error message for saving API key"
+  },
+  "confirmClearCache": {
+    "message": "Are you sure you want to clear the entire cache of solved questions? This action cannot be undone.",
+    "description": "Confirmation message before clearing cache"
+  },
+  "cacheClearedSuccess": {
+    "message": "Cache cleared successfully!",
+    "description": "Success message after clearing cache"
+  },
+  "cacheClearError": {
+    "message": "Error clearing cache. Please try again.",
+    "description": "Generic error message for clearing cache"
+  }
+}
