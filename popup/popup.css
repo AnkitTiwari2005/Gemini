@@ -92,30 +92,43 @@ h2 {
     margin-bottom: 10px;
 }
 
+/* MODIFIED: Make the label a flex container for its content */
 .setting-item label {
-    flex-grow: 1;
-    margin-right: 10px;
+    display: flex; /* Make the label itself a flex container */
+    justify-content: space-between; /* Pushes the label text and toggle to opposite ends */
+    align-items: center; /* Vertically centers the items within the label */
+    flex-grow: 1; /* Allows the label to take up available space within .setting-item */
+    margin-right: 10px; /* Retain original margin to the right */
+    cursor: pointer; /* Indicate the entire label area is clickable */
 }
 
-.setting-item input[type="checkbox"] {
+/* NEW: Style for the text part of the toggle label */
+.setting-item label .toggle-label-text {
+    /* No specific styles needed here, flex on parent label handles positioning */
+}
+
+/* MODIFIED: Target the hidden checkbox *inside* the label */
+.setting-item label input[type="checkbox"] {
     position: absolute;
     opacity: 0;
     width: 0;
     height: 0;
 }
 
-/* Toggle Switch Styling */
-.toggle-switch {
+/* Toggle Switch Styling - MODIFIED: Target the visual span *inside* the label */
+.setting-item label .toggle-switch {
     position: relative;
-    display: inline-block;
+    display: inline-block; /* Keep inline-block or use flex-shrink: 0 */
     width: 36px;
     height: 20px;
     background-color: #ccc;
     border-radius: 10px;
     transition: background-color 0.3s;
-    cursor: pointer;
+    /* cursor: pointer; - removed as parent label now handles the cursor */
+    flex-shrink: 0; /* Prevents the toggle from shrinking when space is tight */
 }
 
+/* The ::before pseudo-element selector remains unchanged, as it applies to .toggle-switch */
 .toggle-switch::before {
     content: '';
     position: absolute;
@@ -128,11 +141,13 @@ h2 {
     transition: transform 0.3s;
 }
 
-.setting-item input[type="checkbox"]:checked + .toggle-switch {
+/* MODIFIED: Target checkbox *inside* the label for checked state background */
+.setting-item label input[type="checkbox"]:checked + .toggle-switch {
     background-color: #4CAF50;
 }
 
-.setting-item input[type="checkbox"]:checked + .toggle-switch::before {
+/* MODIFIED: Target checkbox *inside* the label for checked state animation */
+.setting-item label input[type="checkbox"]:checked + .toggle-switch::before {
     transform: translateX(16px);
 }
 

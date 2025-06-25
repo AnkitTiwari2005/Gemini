@@ -19,14 +19,16 @@
         <div class="settings-section">
             <h2>Settings</h2>
             <div class="setting-item">
-                <label for="autoSolveToggle">Auto-Solve Quizzes:</label>
-                <input type="checkbox" id="autoSolveToggle">
-                <span class="toggle-switch"></span>
+                <label for="autoSolveToggle">
+                    <span class="toggle-label-text">Auto-Solve Quizzes:</span> <input type="checkbox" id="autoSolveToggle">
+                    <span class="toggle-switch"></span>
+                </label>
             </div>
             <div class="setting-item">
-                <label for="explanationToggle">Show Explanations:</label>
-                <input type="checkbox" id="explanationToggle">
-                <span class="toggle-switch"></span>
+                <label for="explanationToggle">
+                    <span class="toggle-label-text">Show Explanations:</span> <input type="checkbox" id="explanationToggle">
+                    <span class="toggle-switch"></span>
+                </label>
             </div>
             <div class="setting-item">
                 <label for="confidenceThreshold">Min. Confidence:</label>
@@ -49,7 +51,6 @@
         </div>
     </div>
 
-    <!-- Scripts with type="module" as required -->
     <script src="components/api_key_input.js" type="module"></script>
     <script src="popup.js" type="module"></script>
 </body>

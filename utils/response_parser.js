@@ -13,7 +13,7 @@ class ResponseParser {
     /**
      * Parses the Gemini API response to extract quiz answers and explanations.
      * @param {object} geminiResponse - The raw JSON response object from the Gemini API.
-     * @param {Array<object>} options - The original array of option objects from DOMDetector.
+     * @param {Array<object>} options - The original array of option objects from DOMDetector (includes {text, value, element}).
      * @param {'single'|'multiple'} questionType - The type of question.
      * @returns {object} An object containing:
      * - `answers`: Array of strings, each being the text of a correct answer.
@@ -43,60 +43,108 @@ class ResponseParser {
             throw new Error('No answer text provided by Gemini.');
         }
 
-        console.log('Gemini raw response text:', responseText);
+        console.log('ResponseParser: Gemini raw response text:', responseText);
 
-        const parsedAnswers = [];
-        let explanation = null;
+        let extractedExplanation = null;
+        let answerPart = responseText;
 
-        // Separate answer from explanation if both are present
-        const explanationMatch = responseText.match(/(Explanation:|Explanation:)\s*(.*)/is);
-        if (explanationMatch && explanationMatch[2]) {
-            explanation = explanationMatch[2].trim();
-            responseText = responseText.substring(0, explanationMatch.index).trim();
+        // Attempt to separate answer from explanation based on "Explanation:" keyword
+        const explanationDelimiter = /Explanation:\s*/i; // Case-insensitive
+        const explanationMatch = responseText.match(explanationDelimiter);
+
+        if (explanationMatch) {
+            extractedExplanation = responseText.substring(explanationMatch.index + explanationMatch[0].length).trim();
+            answerPart = responseText.substring(0, explanationMatch.index).trim();
         }
 
-        // --- Robust Answer Extraction ---
-        // Strategy 1: Look for letter-based answers (A, B, C...)
-        const letterAnswers = responseText.match(/[A-Z](?=[.,\s]|$)/g); // Find capital letters possibly followed by punctuation/space
-        if (letterAnswers && letterAnswers.length > 0) {
-            letterAnswers.forEach(letter => {
-                const index = letter.charCodeAt(0) - 65; // A=0, B=1...
-                if (options[index]) {
-                    parsedAnswers.push(options[index].text);
+        // --- Robust Answer Extraction from `answerPart` ---
+        let parsedAnswerLetters = [];
+        // Ensure maxOptionLetter is correctly calculated, handling cases with many options
+        const maxOptionLetter = options.length > 0 ? String.fromCharCode(64 + options.length) : 'A'; 
+
+
+        if (questionType === 'single') {
+            // Strategy 1: Look for a single letter (A, B, C, D) as the entire answer part
+            if (new RegExp(`^[A-${maxOptionLetter}]$`).test(answerPart)) {
+                parsedAnswerLetters.push(answerPart);
+            } else {
+                // Strategy 2: Look for 'A.', 'B.', 'Option A', 'Answer is B'
+                const singleLetterMatch = answerPart.match(new RegExp(`(?:^|[^A-Z0-9])([A-${maxOptionLetter}])(?:\\.|\\s|$)`, 'i'));
+                if (singleLetterMatch && singleLetterMatch[1]) {
+                    parsedAnswerLetters.push(singleLetterMatch[1].toUpperCase());
                 }
-            });
-        }
-
-        // Strategy 2: If no letter answers, try to match whole option text (less reliable if options are long)
-        if (parsedAnswers.length === 0) {
-            options.forEach(option => {
-                // Use a more robust matching strategy, e.g., includes()
-                // Convert both to lower case for case-insensitive comparison
-                const optionTextLower = option.text.toLowerCase();
-                const responseTextLower = responseText.toLowerCase();
-
-                // If Gemini's response directly contains an option text
-                if (responseTextLower.includes(optionTextLower) && parsedAnswers.length < (questionType === 'single' ? 1 : options.length)) {
-                    parsedAnswers.push(option.text);
+            }
+        } else { // 'multiple' choice
+            // Strategy 1: Look for comma-separated letters (e.g., "A, C", "B, D, A")
+            // This regex now correctly captures multiple letters by finding all matches globally
+            const commaSeparatedMatches = answerPart.match(new RegExp(`[A-${maxOptionLetter}]`, 'g'));
+            if (commaSeparatedMatches) {
+                parsedAnswerLetters = commaSeparatedMatches.map(s => s.trim().toUpperCase());
+            } else {
+                // Strategy 2: Look for multiple individual letters (e.g., "A and C", "B. C. D")
+                // This is already covered by the global regex above.
+                // Re-added for clarity in case future modifications separate concerns.
+                const individualLetters = answerPart.match(new RegExp(`[A-${maxOptionLetter}]`, 'g'));
+                if (individualLetters) {
+                    parsedAnswerLetters = individualLetters.map(s => s.toUpperCase());
                 }
-            });
+            }
         }
 
-        // Fallback for single choice if multiple answers parsed somehow
-        if (questionType === 'single' && parsedAnswers.length > 1) {
-            // Take the first parsed answer or apply a more sophisticated heuristic
-            console.warn('ResponseParser: Multiple answers parsed for single choice. Taking the first.', parsedAnswers);
-            parsedAnswers.splice(1); // Keep only the first
+        // Filter and map to actual option texts
+        let finalParsedAnswers = []; // Changed to `let` for re-assignment in fallback
+        const seenLetters = new Set(); // To ensure unique answers
+
+        // Validate extracted letters against available options
+        for (const letter of parsedAnswerLetters) {
+            const index = letter.charCodeAt(0) - 65;
+            if (options[index] && !seenLetters.has(letter)) {
+                finalParsedAnswers.push(options[index].text);
+                seenLetters.add(letter);
+            } else if (options[index] && seenLetters.has(letter)) {
+                console.warn(`ResponseParser: Duplicate answer letter '${letter}' detected and ignored.`);
+            } else {
+                console.warn(`ResponseParser: Extracted letter '${letter}' does not correspond to a valid option.`);
+            }
         }
         
-        if (parsedAnswers.length === 0) {
+        // --- Fallback if no letter-based answers are found, but options are present in response text ---
+        // This is a lower confidence fallback and should ideally not be hit if prompt is followed.
+        if (finalParsedAnswers.length === 0 && options.length > 0) {
+            console.warn("ResponseParser: No letter-based answers found. Attempting to match full option text as fallback.");
+            const responseTextLower = responseText.toLowerCase();
+
+            options.forEach(option => {
+                const optionTextLower = option.text.toLowerCase();
+                // Check if the exact option text (or a very close match) is present in the response
+                // This is a simple `includes` - a more sophisticated approach might use fuzzy matching
+                if (responseTextLower.includes(optionTextLower) && !finalParsedAnswers.includes(option.text)) {
+                    // For single choice, if multiple answers were picked up by text matching, just take the first
+                    // IMPORTANT: This condition only applies to 'single' choice questions.
+                    if (questionType === 'single' && finalParsedAnswers.length > 0) {
+                        return; // Already found a single answer for a single-choice question
+                    }
+                    finalParsedAnswers.push(option.text);
+                }
+            });
+
+            // For single choice, if multiple answers were picked up by text matching, just take the first
+            // This is a redundant check if the above `return` handles it for 'single', but good for robustness.
+            if (questionType === 'single' && finalParsedAnswers.length > 1) {
+                console.warn('ResponseParser: Multiple answers parsed by text match for single choice. Taking the first.');
+                finalParsedAnswers = [finalParsedAnswers[0]];
+            }
+        }
+
+        if (finalParsedAnswers.length === 0) {
+            ErrorHandler.logError('ResponseParser: Failed to extract any valid answer from Gemini response text.', responseText);
             throw new Error('ResponseParser: Failed to extract any valid answer from Gemini response text.');
         }
 
         return {
-            answers: Array.from(new Set(parsedAnswers)), // Ensure unique answers
-            explanation: explanation,
-            confidence: 100 // Placeholder. Gemini API doesn't directly provide confidence score. Could infer from safety ratings if present.
+            answers: finalParsedAnswers,
+            explanation: extractedExplanation,
+            confidence: 100 // Placeholder. Gemini API doesn't directly provide confidence score.
         };
     }
 }

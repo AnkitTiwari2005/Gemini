@@ -19,6 +19,11 @@ class AnswerRenderer {
             return;
         }
 
+        // --- START DEBUGGING LOGS ---
+        console.log('AnswerRenderer: questionData.options:', questionData.options);
+        console.log('AnswerRenderer: answers from Gemini:', answers);
+        // --- END DEBUGGING LOGS ---
+
         const selectedElements = new Set(); // To prevent duplicate highlighting/selection
 
         questionData.options.forEach(option => {

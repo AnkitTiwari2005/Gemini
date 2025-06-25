@@ -1,13 +1,11 @@
 // background/background.js
-
-console.log("Service Worker Started - Attempt 4! (Module Loader Injection)"); // Updated log for clarity
+console.log("Service Worker Started - Attempt 5! (Module Loader Injection)"); // Updated log for clarity
 
 /**
  * @module BackgroundServiceWorker
  * @description The main background service worker for the Coursera Gemini Solver.
  * Handles inter-script communication, Gemini API calls, and global extension logic.
  */
-
 import { ApiClient } from '../utils/api_client.js';
 import { StorageManager } from '../utils/storage_manager.js';
 import { CONSTANTS } from '../utils/constants.js';
@@ -15,10 +13,12 @@ import { ErrorHandler } from '../utils/error_handler.js';
 import { PromptBuilder } from '../utils/prompt_builder.js';
 import { ResponseParser } from '../utils/response_parser.js';
 
-
 // Define the patterns for Coursera quiz/assignment pages
 const courseraQuizPatterns = [
-  "https://www.coursera.org/learn/*/*/*/*/attempt*"
+  "https://www.coursera.org/learn/*/*/*/*/attempt*",
+  "https://www.coursera.org/learn/*/*/*/*/quiz*", // Added for quiz pages generally
+  "https://www.coursera.org/learn/*/*/*/*/exam*", // Added for exam pages
+  "https://www.coursera.org/learn/*/*/*/*/assessment*" // Added for assessment pages
 ];
 
 // Function to check if a URL matches any of our patterns
@@ -42,7 +42,6 @@ chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
   if (changeInfo.status === 'complete' && tab.url && tab.url.startsWith("http")) {
     if (matchesCourseraQuiz(tab.url)) {
       console.log(`Background: Coursera Quiz Page Detected: ${tab.url}`);
-
       try {
         // Check if the script is already injected to avoid multiple injections on refreshes
         // This 'function' property of executeScript runs code in the target page's context
@@ -69,11 +68,11 @@ chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
   }
 });
 
-
 /**
  * Listener for messages from other parts of the extension (popup, content scripts).
  */
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+    // Return true to indicate that sendResponse will be called asynchronously.
     (async () => {
         if (message.type === CONSTANTS.MESSAGES.SOLVE_QUESTION_REQUEST) {
             /**
@@ -83,11 +82,14 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
              */
             console.log('Background: Received SOLVE_QUESTION_REQUEST', message.payload);
             const { questionData } = message.payload;
-
             try {
                 const apiKey = await StorageManager.get(CONSTANTS.STORAGE_KEYS.GEMINI_API_KEY);
                 if (!apiKey) {
-                    throw new Error('Gemini API Key not found. Please set it in the extension popup.');
+                    sendResponse({
+                        status: 'error',
+                        message: 'Gemini API Key not found. Please set it in the extension popup.'
+                    });
+                    return;
                 }
 
                 // Get user settings for prompt and response parsing
@@ -111,12 +113,15 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
                 );
 
                 if (!parsedResult || !parsedResult.answers.length) {
-                    throw new Error('Could not parse valid answers from Gemini response.');
+                    sendResponse({
+                        status: 'error',
+                        message: 'Could not parse valid answers from Gemini response.'
+                    });
+                    return;
                 }
-                
+
                 // Optional: Implement confidence check here if Gemini model provides it
                 // For now, we assume parsing indicates confidence.
-
                 sendResponse({
                     status: 'success',
                     answers: parsedResult.answers,
@@ -133,10 +138,10 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
                 });
             }
         } else if (message.type === CONSTANTS.MESSAGES.FETCH_SETTINGS_REQUEST) {
-              /**
-               * Handles a request from a content script to fetch current settings.
-               * @returns {object} - Object containing all relevant settings.
-               */
+            /**
+             * Handles a request from a content script to fetch current settings.
+             * @returns {object} - Object containing all relevant settings.
+             */
             try {
                 const settings = await StorageManager.get(CONSTANTS.STORAGE_KEYS.SETTINGS_GROUP) || {};
                 sendResponse({

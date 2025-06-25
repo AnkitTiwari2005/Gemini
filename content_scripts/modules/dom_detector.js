@@ -1,11 +1,9 @@
 // content_scripts/modules/dom_detector.js
-
 /**
  * @module DOMDetector
  * @description Provides utilities to detect and extract quiz questions and their options
  * from the Coursera page's DOM.
  */
-
 class DOMDetector {
     constructor() {
         this.questions = [];
@@ -17,14 +15,22 @@ class DOMDetector {
     detect() {
         console.log("DOMDetector: Starting detection...");
         this.questions = [];
-
         // UPDATED: More robust selectors for different types of question containers
         // This includes general quiz questions, assignment submissions, and self-review pages.
         const questionContainerSelectors = [
-            '[data-testid*="part-Submission_MultipleChoiceQuestion"]', // Covers general MCQs and "Reflect" types
+            // Selectors for specific question types or patterns
+            // MODIFIED: Broadened this selector to catch all 'part-Submission_' types,
+            // including 'CheckboxQuestion' and 'MultipleChoiceQuestion'.
+            '[data-testid^="part-Submission_"]', // Covers general MCQs, Checkbox, and "Reflect" types
             '.rc-FormPartsQuestion', // Common standard quiz question container
-            'div[role="group"][aria-labelledby*="-legend"]', // Broader selector for question groups, seen in 8.txt
-            '.rc-QuizQuestion' // Another general Coursera quiz question class
+            // MODIFIED: Make the 'div[role="group"][aria-labelledby*="-legend"]' selector more specific
+            // by ensuring it also contains a .rc-FormPartsQuestion or similar to avoid over-detection.
+            // Also consider if it's a direct question element within this structure:
+            'div[role="group"][aria-labelledby*="-legend"] .rc-FormPartsQuestion',
+            'div[role="group"][aria-labelledby*="-legend"][data-testid*="question"]',
+            '.rc-QuizQuestion', // Another general Coursera quiz question class
+            // Add more general, but still specific enough, selectors if quizzes are missed
+            '.c-quiz-question' // Another common class for older Coursera quizzes
         ];
 
         let potentialQuestionContainers = [];
@@ -41,163 +47,245 @@ class DOMDetector {
             console.log("DOMDetector: No potential quiz question containers found.");
             return;
         }
-
         console.log(`DOMDetector: Found ${potentialQuestionContainers.length} potential quiz question containers.`);
 
-        potentialQuestionContainers.forEach((container, index) => {
+        for (const container of potentialQuestionContainers) {
+            console.log("DOMDetector: Processing potential question container:", container);
             try {
-                const question = this.extractQuestion(container, index);
+                const question = this.extractQuestion(container);
                 if (question) {
                     this.questions.push(question);
+                    console.log("DOMDetector: Successfully extracted and added question:", question.question.substring(0, 50) + "...");
+                } else {
+                    console.warn("DOMDetector: Skipping container, extractQuestion returned null for:", container);
                 }
             } catch (error) {
-                console.error(`DOMDetector: Error extracting question from container ${index}:`, error);
+                console.error(`DOMDetector: Critical error extracting question from container:`, container, error);
             }
-        });
-
-        console.log(`DOMDetector: Extracted ${this.questions.length} questions.`);
+        }
+        console.log(`DOMDetector: Extracted ${this.questions.length} valid questions.`);
     }
 
     /**
      * Extracts a single question and its options from a given container element.
      * @param {Element} container - The DOM element containing the question.
-     * @param {number} index - The index of the question (for logging/debugging).
-     * @returns {Object|null} The extracted question object, or null if extraction fails.
+     * @returns {Object|null} The extracted question object, or null if extraction fails or data is insufficient.
      */
-    extractQuestion(container, index) {
+    extractQuestion(container) {
         let questionText = null;
         let options = [];
         let codeSnippet = null; // To store extracted code
 
-        // --- Question Text and Code Extraction ---
-        // Prioritize specific elements for question text
+        // --- Question Text Extraction ---
+        console.log("DOMDetector: Attempting to extract question text...");
         const questionTextSelectors = [
-            '[data-testid="legend"] .rc-CML p',
-            '[data-testid="legend"] p',
-            '.rc-FormPartsQuestion__contentCell .rc-CML p',
-            'div[data-test-id="question-text"] p' // Common for older quizzes
+            '[data-testid="legend"] .rc-CML p', // Common for questions with explicit legend
+            '[data-testid="legend"]', // Direct legend text (might include question number, which will be cleaned)
+            '.rc-FormPartsQuestion__contentCell .rc-CML p', // Content within a common question part structure
+            'div[data-test-id="question-text"] p', // Common for older quizzes
+            '.rc-CML p', // General CML paragraph, should be within a question context, last resort
+            '.rc-CodeBlockV2 + p', // Paragraph immediately following a code block (might be question text)
+            '.rc-CML.html-rendered-content > p' // Another common pattern for HTML content
         ];
 
         for (const selector of questionTextSelectors) {
             const element = container.querySelector(selector);
             if (element && element.textContent.trim()) {
                 questionText = element.textContent.trim();
+                // Clean up leading numbers or letters (e.g., "1. " or "A. ") if it's not part of the question.
+                // This is a heuristic, be careful with actual question content starting with numbers/letters.
+                questionText = questionText.replace(/^\s*\d+\.\s*|^[A-Z]\.\s*/, '').trim();
+                console.log(`DOMDetector: Question text found using "${selector}":`, questionText.substring(0, Math.min(questionText.length, 50)) + "...");
                 break;
             }
         }
 
-        // UPDATED: Look for code blocks within the question container
-        const codeBlockSelectors = [
-            'pre code', // Standard code block
-            '.rc-CodeBlock code', // Coursera-specific code block class
-            '[data-testid="cml-viewer"] pre code', // Code inside CML viewer
-            '[data-testid="cml-code"] pre code', // Specific data-testid for code
-            '[data-testid="cml-code"]', // Sometimes code is directly within this div
-            '.c-content-code pre' // Older code blocks
-        ];
+        // CRITICAL VALIDATION: Ensure a substantial question text is found
+        if (!questionText || questionText.length < 10) { // Require at least 10 characters for question text
+            console.warn(`DOMDetector: Insufficient or no question text found for container. Skipping.`, container);
+            return null;
+        }
 
-        for (const selector of codeBlockSelectors) {
-            const codeElement = container.querySelector(selector);
-            if (codeElement && codeElement.textContent.trim()) {
-                codeSnippet = codeElement.textContent.trim();
-                break;
+        // --- Code Snippet Extraction ---
+        console.log("DOMDetector: Attempting to extract code snippet...");
+        // Priority 1: Check for the hidden textarea used by Monaco Editor
+        const monacoTextarea = container.querySelector('.monaco-editor textarea.inputarea[aria-label*="Editor content"]');
+        if (monacoTextarea && monacoTextarea.value.trim()) {
+            codeSnippet = monacoTextarea.value.trim();
+            console.log("DOMDetector: Code snippet extracted from Monaco textarea.");
+        } else {
+            console.log("DOMDetector: Monaco textarea not found or empty, trying other selectors.");
+            // Priority 2: Iterate through view-line spans within the Monaco editor's visible area
+            // Target specific Monaco editor parts that hold code, usually within `rc-CodeBlockV2` or similar
+            const codeLineElements = container.querySelectorAll(
+                '.rc-CodeBlockV2 .view-line > span, ' + // Direct span children of view-line
+                '.rc-CodeBlockV2 code, ' + // General code tag within a block
+                '.rc-CodeBlockV2 pre' // Preformatted text block
+            );
+            let collectedLines = [];
+            codeLineElements.forEach(lineElement => {
+                // Filter out line numbers or other non-code elements if present
+                if (lineElement.closest('.line-numbers') === null) {
+                    collectedLines.push(lineElement.textContent);
+                }
+            });
+
+            if (collectedLines.length > 0) {
+                // Join lines, then trim to remove any empty lines that might have been collected
+                codeSnippet = collectedLines.join('\n').trim(); // Use '\n' to preserve line breaks
+                if (codeSnippet) {
+                    console.log("DOMDetector: Code snippet extracted line by line from code elements.");
+                } else {
+                    console.log("DOMDetector: Line by line extraction resulted in empty snippet.");
+                }
+            } else {
+                console.log("DOMDetector: No code lines found with targeted selectors.");
             }
         }
 
         // Combine question text and code snippet
         if (questionText && codeSnippet) {
+            // Ensure proper markdown formatting for code
             questionText = `${questionText}\n\n\`\`\`javascript\n${codeSnippet}\n\`\`\``;
+            console.log("DOMDetector: Combined question text with code snippet.");
         } else if (!questionText && codeSnippet) {
-            // If only code is found, make the code the question text
+            // If only code is found, make the code the question text (less common for quizzes but possible)
             questionText = `\`\`\`javascript\n${codeSnippet}\n\`\`\``;
-        }
-        
-        // Final fallback for question text if not found through specific selectors, but found in a 'legend' like area
-        if (!questionText) {
-            const legendElement = container.querySelector('[data-testid="legend"]');
-            if (legendElement && legendElement.textContent.trim()) {
-                // Attempt to clean up numerical prefixes (e.g., "1. Question Text")
-                questionText = legendElement.textContent.trim().replace(/^\d+\.\s*/, '');
-            }
-        }
-
-        if (!questionText) {
-            console.warn(`DOMDetector: Could not find any valid question text for container ${index}.`);
-            return null; // Return null if no question text at all
+            console.log("DOMDetector: Question text set to only code snippet.");
         }
 
         // --- Options Extraction ---
-        // UPDATED: More robust selectors for individual answer option containers
+        console.log("DOMDetector: Attempting to extract options...");
         const optionContainerSelectors = [
             '[data-testid="Submission_MultipleChoiceQuestion__option"]',
             '.rc-Option', // Most consistent option wrapper
             '.rc-FormPartsQuestion__choices > div', // General choices wrapper
             'div[role="radio"]', // If options are directly role="radio"
             'div[role="checkbox"]', // If options are directly role="checkbox"
-            '.c-choice-group__item' // Found in some older structures
+            '.c-choice-group__item', // Found in some older structures
+            '.rc-FormPartsQuestion__option', // Another common option class
+            'div[data-test-id="choice-item"]' // Yet another option selector
         ];
-        
-        let rawOptions = [];
+
+        let rawOptionsElements = [];
         optionContainerSelectors.forEach(selector => {
             container.querySelectorAll(selector).forEach(optionElement => {
-                // Add unique option elements
-                if (!rawOptions.includes(optionElement)) {
-                    rawOptions.push(optionElement);
+                if (!rawOptionsElements.includes(optionElement)) {
+                    rawOptionsElements.push(optionElement);
                 }
             });
         });
 
-        // Fallback for options if primary selectors don't work, look for inputs directly
-        if (rawOptions.length === 0) {
-             container.querySelectorAll('input[type="radio"], input[type="checkbox"]').forEach(input => {
-                const parentElement = input.closest('label') || input.closest('div');
-                if (parentElement && !rawOptions.includes(parentElement)) {
-                    rawOptions.push(parentElement);
+        // Fallback for options if primary selectors don't work, look for inputs directly and find their labels/parents
+        if (rawOptionsElements.length === 0) {
+            console.log("DOMDetector: No option containers found with primary selectors, trying direct input elements.");
+            container.querySelectorAll('input[type="radio"], input[type="checkbox"]').forEach(input => {
+                // Find the closest parent element that typically wraps the input and its text (e.g., a label or a div acting as an option)
+                const parentElement = input.closest('label') || input.closest('.rc-Option') || input.closest('div[role="group"] > div') || input.closest('div');
+                if (parentElement && !rawOptionsElements.includes(parentElement)) {
+                    rawOptionsElements.push(parentElement);
                 }
             });
         }
+        console.log(`DOMDetector: Found ${rawOptionsElements.length} raw option elements.`);
 
-        rawOptions.forEach(optionElement => {
+        rawOptionsElements.forEach((optionElement, index) => {
             let optionText = null;
             let optionValue = null;
-            let inputElement = null; // To store the actual input element
+            let inputElement = null;
 
-            // UPDATED: Try to find the option text within the option element
-            const textElement = optionElement.querySelector('.rc-Option .rc-CML p') ||
-                                optionElement.querySelector('.rc-Option__text') ||
-                                optionElement.querySelector('span:not([data-testid="visually-hidden"])') || // Exclude hidden spans
-                                optionElement.querySelector('.cml-viewer p') || // General CML within an option
-                                optionElement.querySelector('p'); // General paragraph within an option
-            
-            if (textElement && textElement.textContent.trim()) {
-                optionText = textElement.textContent.trim();
-            } else {
-                // Fallback to direct text content of the option element, cleaning up any leading numbers/letters
-                optionText = optionElement.textContent.trim().replace(/^[a-zA-Z]\.\s*|^[0-9]\.\s*/, '');
-            }
-
-            // Get the value and the input element itself from within the option element
+            // Try to find the associated input element first
             inputElement = optionElement.querySelector('input[type="radio"], input[type="checkbox"]');
-            if (inputElement) {
-                optionValue = inputElement.value;
+
+            // NEW: Prioritize code element extraction within the option
+            const codeElementsInOption = optionElement.querySelectorAll('pre, code, .monaco-editor .view-line > span');
+            let collectedOptionCodeLines = [];
+            codeElementsInOption.forEach(lineElement => {
+                if (lineElement.closest('.line-numbers') === null) {
+                    collectedOptionCodeLines.push(lineElement.textContent);
+                }
+            });
+
+            if (collectedOptionCodeLines.length > 0 && collectedOptionCodeLines.join('\n').trim().length > 5) { // Require a meaningful code snippet
+                optionText = collectedOptionCodeLines.join('\n').trim();
+                console.log("DOMDetector: Code snippet extracted from option element.");
+            } else {
+                // Try to find the option text within the option element
+                const textElement = optionElement.querySelector('.rc-Option .rc-CML p') ||
+                                    optionElement.querySelector('.rc-Option__text') ||
+                                    optionElement.querySelector('span:not([data-testid="visually-hidden"])') || // Avoid hidden screen reader text
+                                    optionElement.querySelector('.cml-viewer p') ||
+                                    optionElement.querySelector('p') ||
+                                    // Fallback: if no specific text element, take text from common immediate children
+                                    optionElement.querySelector('.rc-CML') ||
+                                    optionElement; // As a last resort, take text content of the option element itself
+
+                if (textElement && textElement.textContent.trim()) {
+                    optionText = textElement.textContent.trim();
+                    // Clean up leading option letters if they are redundant (e.g., "A. Option Text" -> "Option Text")
+                    optionText = optionText.replace(/^[A-Z]\.\s*/, '').trim();
+                } else {
+                    // Fallback to direct text content of the option element, cleaning up any leading numbers/letters
+                    optionText = optionElement.textContent.trim().replace(/^[a-zA-Z]\.\s*|^[0-9]\.\s*/, '').trim();
+                }
             }
 
+            // Always clean Monaco Editor artifacts from the extracted optionText
             if (optionText) {
-                options.push({ text: optionText, value: optionValue, element: inputElement }); // Store the input element for interaction
+                optionText = DOMDetector._cleanMonacoEditorArtifacts(optionText);
+            }
+
+            if (inputElement && inputElement.value !== undefined && inputElement.value !== null && inputElement.value !== '') {
+                optionValue = inputElement.value;
+            } else {
+                // Generate a stable unique value if not present from input (important for internal mapping)
+                optionValue = optionText ? optionText.replace(/[^a-zA-Z0-9]/g, '_').toLowerCase().substring(0, 50) : `option_${index}`;
+                console.warn(`DOMDetector: inputElement.value not found or empty for option, generated fallback value: ${optionValue}. Option element:`, optionElement);
+            }
+
+            if (optionText && inputElement) {
+                options.push({ text: optionText, value: optionValue, element: inputElement });
+            } else {
+                console.warn(`DOMDetector: Skipping malformed option. No text or input element found for:`, optionElement);
             }
         });
 
-        if (options.length === 0) {
-            console.warn(`DOMDetector: No options extracted for question "${questionText.substring(0, 50)}..." after all attempts.`);
-            // This might be a fill-in-the-blank or free text question, or an undetected option structure.
+        // CRITICAL VALIDATION: Ensure at least two options are found for valid multiple-choice questions
+        // A quiz question should have at least 2 options to be solvable.
+        if (options.length < 2) {
+            console.warn(`DOMDetector: Insufficient options extracted (found ${options.length}) for question "${questionText.substring(0, Math.min(questionText.length, 50))}..." Skipping this question.`);
+            return null;
         }
 
-        // Return the structured question object including the container DOM element
+        // Determine question type (crucial for distinguishing radio vs. checkbox)
+        // This is done by checking the 'type' attribute of the input elements within the options.
+        const questionType = options.some(opt => opt.element && opt.element.type === 'checkbox') ? 'multiple' : 'single';
+
+        console.log("DOMDetector: Successfully extracted question data:", {
+            question: questionText,
+            options: options.map(opt => ({ text: opt.text, value: opt.value })),
+            questionType: questionType
+        });
+
         return {
+            container: container,
             question: questionText,
             options: options,
-            container: container // Include the main question container element
+            questionType: questionType
         };
+    }
+
+    /**
+     * Cleans common Monaco Editor UI strings and CSS artifacts from extracted text.
+     * @param {string} text - The input text potentially containing Monaco artifacts.
+     * @returns {string} The cleaned text.
+     * @private
+     */
+    static _cleanMonacoEditorArtifacts(text) {
+        // Regex to remove common Monaco editor UI strings
+        // This includes "Enter to Rename", "Shift+Enter to Preview", and specific CSS class patterns
+        const monacoRegex = /(\s*(?:Enter to Rename|Shift\+Enter to Preview)\s*|\.monaco-list\.list_id_\d+:[^\s]+\s*\{[^}]*?\})/g;
+        return text.replace(monacoRegex, '').trim();
     }
 
     /**
@@ -209,5 +297,4 @@ class DOMDetector {
     }
 }
 
-// Export the DOMDetector class so it can be imported by other modules (like coursera_solver.js)
 export { DOMDetector };
