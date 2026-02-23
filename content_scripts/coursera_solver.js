@@ -13,6 +13,8 @@ import { AnswerRenderer } from './modules/answer_renderer.js';
 import { CONSTANTS } from '../utils/constants.js';
 import { ErrorHandler } from '../utils/error_handler.js';
 import { CacheManager } from '../utils/cache_manager.js';
+import { SmartBlocker } from '../utils/smart_blocker.js';
+import { extractCourseraIdentifiers } from '../utils/url_parser.js'; // CORRECT IMPORT FOR URL PARSER
 
 let currentSettings = {};
 let isSolverActive = false; // Prevents re-triggering while solving
@@ -30,6 +32,9 @@ const SafeErrorHandler = typeof ErrorHandler !== 'undefined' ?
             }
         }
     };
+
+// *** REMOVED THE OLD, PROBLEMATIC extractCourseAndQuizIdsForSolver FUNCTION HERE ***
+// The functionality is now provided by extractCourseraIdentifiers from utils/url_parser.js
 
 async function initializeSolver() {
     console.log('Coursera Gemini Solver: Initializing...');
@@ -116,6 +121,18 @@ async function detectAndSolveQuizzes(forceSolve = false) {
             return;
         }
 
+        // --- USE THE CORRECTED URL PARSER FUNCTION HERE ---
+        // This now correctly calls the imported function.
+        const urlIdentifiers = extractCourseraIdentifiers(window.location.href);
+        const quizIds = urlIdentifiers ? { courseId: urlIdentifiers.courseId, quizId: urlIdentifiers.quizId } : null;
+
+        if (!quizIds || !quizIds.courseId || !quizIds.quizId) { // Added explicit check for null courseId/quizId
+            SafeErrorHandler.logError("CourseraSolver: Could not extract courseId or quizId from URL for Smart Blocker. Smart Blocker will be bypassed.", window.location.href);
+            UIFeedback.showToast('Warning: Quiz/Course IDs not detected. Smart Blocker disabled.', 'warning', 5000);
+        }
+        // --- END URL PARSER INTEGRATION ---
+
+
         for (const questionData of quizQuestions) {
             // Validate questionData more thoroughly before proceeding
             if (!questionData || !questionData.container || !questionData.question || typeof questionData.question !== 'string' || !Array.isArray(questionData.options) || questionData.options.length === 0) {
@@ -130,20 +147,67 @@ async function detectAndSolveQuizzes(forceSolve = false) {
                 continue;
             }
 
-            // CORRECTED: Pass question text and options to generate hash
             const questionHash = CacheManager.generateQuestionHash(questionData.question, questionData.options);
             let cachedAnswer = await CacheManager.get(questionHash);
+            
+            // --- SMART BLOCKER INTEGRATION (moved to apply to cached answers too) ---
+            let filteredOptions = questionData.options;
+            let blockedAnswerSignatures = []; // Initialize
+            if (quizIds && quizIds.courseId && quizIds.quizId) {
+                const questionSignature = SmartBlocker.generateSignature(questionData.question);
+                blockedAnswerSignatures = await SmartBlocker.getWrongAnswers(
+                    quizIds.courseId,
+                    quizIds.quizId,
+                    questionSignature
+                );
+
+                if (blockedAnswerSignatures.length > 0) {
+                    console.log(`SmartBlocker: Found ${blockedAnswerSignatures.length} previously wrong answers for this question.`);
+                    filteredOptions = questionData.options.filter(option => {
+                        const optionSignature = SmartBlocker.generateSignature(option.text);
+                        const isBlocked = blockedAnswerSignatures.includes(optionSignature);
+                        if (isBlocked) {
+                            console.warn(`SmartBlocker: Blocking previously wrong option: "${option.text}"`);
+                        }
+                        return !isBlocked;
+                    });
+                    if (filteredOptions.length === 0 && questionData.options.length > 0) {
+                        SafeErrorHandler.logError("SmartBlocker: All options for this question were previously marked wrong. Using original options as fallback.", questionData);
+                        UIFeedback.showToast("Warning: All options previously incorrect. AI will pick best guess.", 'warning');
+                        filteredOptions = questionData.options;
+                    } else if (filteredOptions.length === 0) {
+                        SafeErrorHandler.logError("SmartBlocker: No options detected after filtering. Skipping question.", questionData);
+                        UIFeedback.markQuestionAsSolved(questionData.container, 'error');
+                        continue; // Skip this question
+                    }
+                }
+            }
+            // --- END SMART BLOCKER INTEGRATION (moved) ---
 
             if (cachedAnswer) {
-                console.log('Found cached answer for question:', questionData.question);
-                UIFeedback.showTooltip(questionData.container, 'Using cached answer!', 'info');
-                AnswerRenderer.renderAnswer(questionData, cachedAnswer.answers, currentSettings.autoSolve);
-                if (currentSettings.showExplanations && cachedAnswer.explanation) {
-                    UIFeedback.showExplanation(questionData.container, cachedAnswer.explanation);
+                // Check if the cached answer is blocked
+                const isCachedAnswerBlocked = cachedAnswer.answers.some(ans => {
+                    const ansSignature = SmartBlocker.generateSignature(ans);
+                    return blockedAnswerSignatures.includes(ansSignature);
+                });
+
+                if (isCachedAnswerBlocked) {
+                    console.warn(`SmartBlocker: Cached answer for "${questionData.question}" is blocked. Re-solving with filtered options.`);
+                    // Fall through to the Gemini API call section below
+                } else {
+                    console.log('Found valid cached answer for question:', questionData.question);
+                    UIFeedback.showTooltip(questionData.container, 'Using cached answer!', 'info');
+                    AnswerRenderer.renderAnswer(questionData, cachedAnswer.answers, currentSettings.autoSolve);
+                    if (currentSettings.showExplanations && cachedAnswer.explanation) {
+                        UIFeedback.showExplanation(questionData.container, cachedAnswer.explanation);
+                    }
+                    solvedCount++;
+                    continue; // Continue to the next question if cached answer is valid
                 }
-                solvedCount++;
-                continue;
             }
+
+            // If no valid cached answer was found (either no cache or cached answer was blocked),
+            // proceed to solve with Gemini using filtered options.
 
             UIFeedback.markQuestionAsProcessing(questionData.container);
             UIFeedback.showTooltip(questionData.container, 'Solving with Gemini...', 'info');
@@ -152,18 +216,17 @@ async function detectAndSolveQuizzes(forceSolve = false) {
                 await new Promise(resolve => setTimeout(resolve, currentSettings.delayBeforeSolveMs));
             }
 
-            // Create a serializable payload by omitting the DOM element 'container'
-            // and ensuring options are also simple, serializable objects.
+            // Create a serializable payload with potentially filtered options
             const serializableQuestionData = {
                 question: questionData.question,
-                options: questionData.options.map(opt => ({ text: opt.text, value: opt.value })),
-                questionType: questionData.questionType
+                options: filteredOptions.map(opt => ({ text: opt.text, value: opt.value })), // Use filtered options
+                questionType: questionData.type
             };
 
             // Send message and await response
             const response = await chrome.runtime.sendMessage({
                 type: CONSTANTS.MESSAGES.SOLVE_QUESTION_REQUEST,
-                payload: { questionData: serializableQuestionData } // Send the clean, serializable data
+                payload: { questionData: serializableQuestionData }
             });
 
             if (response && response.status === 'success') {

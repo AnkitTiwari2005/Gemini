@@ -1,5 +1,5 @@
 // background/background.js
-console.log("Service Worker Started - Attempt 5! (Module Loader Injection)"); // Updated log for clarity
+console.log("Service Worker Started - Dynamic Module Injection for Result Parser"); // Updated log for clarity
 
 /**
  * @module BackgroundServiceWorker
@@ -12,60 +12,102 @@ import { CONSTANTS } from '../utils/constants.js';
 import { ErrorHandler } from '../utils/error_handler.js';
 import { PromptBuilder } from '../utils/prompt_builder.js';
 import { ResponseParser } from '../utils/response_parser.js';
+import * as UrlParser from '../utils/url_parser.js'; // CHANGED: Import all from UrlParser
+import { SmartBlocker } from '../utils/smart_blocker.js'; // MOVED: Statically import SmartBlocker here
 
 // Define the patterns for Coursera quiz/assignment pages
 const courseraQuizPatterns = [
-  "https://www.coursera.org/learn/*/*/*/*/attempt*",
-  "https://www.coursera.org/learn/*/*/*/*/quiz*", // Added for quiz pages generally
-  "https://www.coursera.org/learn/*/*/*/*/exam*", // Added for exam pages
-  "https://www.coursera.org/learn/*/*/*/*/assessment*" // Added for assessment pages
+    "https://www.coursera.org/learn/*/*/*/*/attempt*",
+    "https://www.coursera.org/learn/*/*/*/*/quiz*", // Added for quiz pages generally
+    "https://www.coursera.org/learn/*/*/*/*/exam*", // Added for exam pages
+    "https://www.coursera.org/learn/*/*/*/*/assessment*" // Added for assessment pages
 ];
 
+// Define patterns for Coursera quiz result pages
+const courseraResultPatterns = [
+    "https://www.coursera.org/learn/*/*/quiz/*/result*",
+    "https://www.coursera.org/learn/*/exam/*/result*",
+    "https://www.coursera.org/learn/*/assessment/*/result*",
+    "https://www.coursera.org/learn/*/supplement/*/result*",
+    "https://www.coursera.org/learn/*/assignment-submission/*/view-feedback*", // Covers cases like your example URL
+    "https://www.coursera.org/learn/*/assignment-submission/*/*/view-feedback*" // More general for potentially nested slugs
+];
+
+
 // Function to check if a URL matches any of our patterns
-function matchesCourseraQuiz(url) {
-  for (const pattern of courseraQuizPatterns) {
-    // Convert glob pattern to a regex pattern
-    // Escapes special regex characters, replaces '*' with '.*?' (non-greedy match for any chars)
-    const regexPattern = pattern.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/\\\*/g, '.*?');
-    const regex = new RegExp(`^${regexPattern}$`);
-    if (regex.test(url)) {
-      return true;
+function matchesPattern(url, patterns) {
+    for (const pattern of patterns) {
+        // Convert glob pattern to a regex pattern
+        // Escapes special regex characters, replaces '*' with '.*?' (non-greedy match for any chars)
+        const regexPattern = pattern.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/\\\*/g, '.*?');
+        const regex = new RegExp(`^${regexPattern}$`);
+        if (regex.test(url)) {
+            return true;
+        }
     }
-  }
-  return false;
+    return false;
 }
 
 // Listen for tab updates (when a tab's URL changes or it completes loading)
 chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
-  // We only care when the tab finishes loading and has a URL
-  // 'tab.url.startsWith("http")' ensures it's a web page, not an internal Chrome page
-  if (changeInfo.status === 'complete' && tab.url && tab.url.startsWith("http")) {
-    if (matchesCourseraQuiz(tab.url)) {
-      console.log(`Background: Coursera Quiz Page Detected: ${tab.url}`);
-      try {
-        // Check if the script is already injected to avoid multiple injections on refreshes
-        // This 'function' property of executeScript runs code in the target page's context
-        const results = await chrome.scripting.executeScript({
-          target: { tabId: tabId },
-          function: () => window.courseraSolverInjected // Check for a global flag set by your loader script
-        });
+    // We only care when the tab finishes loading and has a URL
+    // 'tab.url.startsWith("http")' ensures it's a web page, not an internal Chrome page
+    if (changeInfo.status === 'complete' && tab.url && tab.url.startsWith("http")) {
+        const isQuizPage = matchesPattern(tab.url, courseraQuizPatterns);
+        const isResultPage = matchesPattern(tab.url, courseraResultPatterns); // Keep this check for logic
 
-        // If the script is not already injected, then inject the loader script
-        if (!results || !results[0] || !results[0].result) {
-          await chrome.scripting.executeScript({
-            target: { tabId: tabId },
-            files: ['content_scripts/loader.js'], // <--- IMPORTANT CHANGE HERE: Inject loader.js
-            injectImmediately: true // Try injecting immediately for faster setup
-          });
-          console.log("Background: loader.js injected successfully, which will load coursera_solver.js as a module.");
+        if (isQuizPage && !isResultPage) { // Only inject loader on quiz pages, not result pages
+            console.log(`Background: Coursera Quiz Page Detected: ${tab.url}`);
+            try {
+                // Check if the script is already injected to avoid multiple injections on refreshes
+                const results = await chrome.scripting.executeScript({
+                    target: { tabId: tabId },
+                    function: () => window.courseraSolverInjected // Check for a global flag set by your loader script
+                });
+
+                // If the script is not already injected, then inject the loader script
+                if (!results || !results[0] || !results[0].result) {
+                    await chrome.scripting.executeScript({
+                        target: { tabId: tabId },
+                        files: ['content_scripts/loader.js'], // <--- IMPORTANT CHANGE HERE: Inject loader.js
+                        injectImmediately: true // Try injecting immediately for faster setup
+                    });
+                    console.log("Background: loader.js injected successfully, which will load coursera_solver.js as a module.");
+                } else {
+                    console.log("Background: coursera_solver.js (via loader) already injected on this page.");
+                }
+            } catch (error) {
+                console.error("Background: Failed to inject loader.js:", error);
+            }
+        } else if (isResultPage) {
+            console.log(`Background: Coursera Quiz Result Page Detected: ${tab.url}`);
+            try {
+                // Check if quiz_result_loader.js is already injected to avoid multiple injections
+                // We are using a flag set by quiz_result_loader.js itself.
+                const results = await chrome.scripting.executeScript({
+                    target: { tabId: tabId },
+                    function: () => window.courseraResultParserInjectedViaLoader // New flag for result parser injected via loader
+                });
+
+                if (!results || !results[0] || !results[0].result) {
+                    // Inject quiz_result_loader.js as a regular script (NOT as a module here)
+                    await chrome.scripting.executeScript({
+                        target: { tabId: tabId },
+                        files: ['content_scripts/quiz_result_loader.js'], // Inject the loader script
+                        injectImmediately: true // Try injecting immediately for faster setup
+                        // IMPORTANT: Removed 'type: "module"' here. The loader handles that.
+                    });
+                    console.log("Background: quiz_result_loader.js injected successfully. It will load quiz_result_parser.js as a module.");
+                } else {
+                    console.log("Background: quiz_result_loader.js already injected on this page.");
+                }
+            } catch (error) {
+                console.error("Background: Failed to inject quiz_result_loader.js:", error);
+            }
         } else {
-          console.log("Background: coursera_solver.js (via loader) already injected on this page.");
+            console.log(`Background: URL did not match any specific Coursera patterns for background logic: ${tab.url}`);
         }
-      } catch (error) {
-        console.error("Background: Failed to inject loader.js:", error);
-      }
     }
-  }
 });
 
 /**
@@ -95,7 +137,6 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
                 // Get user settings for prompt and response parsing
                 const settings = await StorageManager.get(CONSTANTS.STORAGE_KEYS.SETTINGS_GROUP) || {};
                 const showExplanations = settings[CONSTANTS.STORAGE_KEYS.SETTINGS.EXPLANATIONS] ?? false;
-                const minConfidence = settings[CONSTANTS.STORAGE_KEYS.SETTINGS.MIN_CONFIDENCE] ?? 70;
 
                 // 1. Build the prompt for Gemini
                 const prompt = PromptBuilder.buildQuizPrompt(questionData, showExplanations);
@@ -120,8 +161,6 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
                     return;
                 }
 
-                // Optional: Implement confidence check here if Gemini model provides it
-                // For now, we assume parsing indicates confidence.
                 sendResponse({
                     status: 'success',
                     answers: parsedResult.answers,
@@ -134,7 +173,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
                 sendResponse({
                     status: 'error',
                     message: error.message || 'Failed to get answer from Gemini API. Check API key or network.',
-                    details: error.details // Include more details if available (e.g., from API error)
+                    details: error.details
                 });
             }
         } else if (message.type === CONSTANTS.MESSAGES.FETCH_SETTINGS_REQUEST) {
@@ -157,8 +196,30 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
                 ErrorHandler.logError('Error fetching settings for content script:', error);
                 sendResponse({ status: 'error', message: 'Failed to load settings.' });
             }
+        } else if (message.type === CONSTANTS.MESSAGES.REPORT_INCORRECT_ANSWER) {
+            const { questionSignature, wrongAnswerSignature } = message.payload;
+
+            // Get the URL from the sender tab to extract course and quiz IDs
+            const currentTabUrl = sender.tab.url; // Use sender.tab.url to get the context URL
+
+            try {
+                // CHANGED: Use UrlParser.extractCourseAndQuizIdsFromResultUrl for result page URLs
+                const { courseId, quizId } = UrlParser.extractCourseAndQuizIdsFromResultUrl(currentTabUrl);
+
+                if (!courseId || !quizId) {
+                    ErrorHandler.logError('CourseraSolver: Could not extract courseId or quizId from URL for Smart Blocker.', currentTabUrl);
+                    sendResponse({ status: 'error', message: 'Failed to report incorrect answer: Could not identify quiz context.' });
+                    return;
+                }
+
+                // SmartBlocker is now statically imported at the top of the file
+                await SmartBlocker.addWrongAnswer(courseId, quizId, questionSignature, wrongAnswerSignature);
+                sendResponse({ status: 'success', message: 'Incorrect answer reported successfully.' });
+            } catch (error) {
+                ErrorHandler.logError('Failed to report incorrect answer:', error);
+                sendResponse({ status: 'error', message: 'Failed to report incorrect answer.' });
+            }
         }
-        // Add more message handlers as the extension grows (e.g., for reporting incorrect answers)
     })();
     return true; // Indicates an asynchronous response
 });
@@ -186,6 +247,3 @@ chrome.runtime.onInstalled.addListener(async (details) => {
         }
     }
 });
-
-// Implement heartbeat/keep-alive if necessary for specific long-running tasks
-// For typical quiz solving, Service Worker should wake up on message.

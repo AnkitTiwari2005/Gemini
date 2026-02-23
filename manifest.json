@@ -44,9 +44,36 @@
         "utils/constants.js",
         "utils/error_handler.js",
         "utils/cache_manager.js",
-        "utils/storage_manager.js" 
+        "utils/storage_manager.js",
+        "utils/smart_blocker.js",
+        "utils/url_parser.js",
+        "content_scripts/quiz_result_parser.js"
       ],
       "matches": ["https://www.coursera.org/*"]
+    }
+  ],
+  "content_scripts": [
+    {
+      "matches": [
+        "https://www.coursera.org/learn/*/quiz/*",
+        "https://www.coursera.org/learn/*/exam/*",
+        "https://www.coursera.org/learn/*/assessment/*",
+        "https://www.coursera.org/learn/*/supplement/*/attempt*"
+      ],
+      "js": ["content_scripts/loader.js"],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": [
+        "https://www.coursera.org/learn/*/quiz/*/result*",
+        "https://www.coursera.org/learn/*/exam/*/result*",
+        "https://www.coursera.org/learn/*/assessment/*/result*",
+        "https://www.coursera.org/learn/*/supplement/*/result*",
+        "https://www.coursera.org/learn/*/assignment-submission/*/view-feedback*",
+        "https://www.coursera.org/learn/*/assignment-submission/*/*/view-feedback*"
+      ],
+      "js": ["content_scripts/quiz_result_loader.js"],
+      "run_at": "document_idle"
     }
   ]
 }

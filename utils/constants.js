@@ -8,7 +8,6 @@
 
 const CONSTANTS = {
     // Gemini API Configuration
-    // --- UPDATED: Changed model from 'gemini-pro' to 'gemini-2.0-flash' ---
     GEMINI_API_URL: 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent',
     
     // Chrome Storage Keys
@@ -20,9 +19,9 @@ const CONSTANTS = {
             EXPLANATIONS: 'showExplanations',
             MIN_CONFIDENCE: 'minConfidence',
             DELAY_SOLVE_MS: 'delayBeforeSolveMs'
-            // Add more settings keys here
         },
-        CACHED_ANSWERS: 'cachedAnswers' // Key for the local storage cache
+        CACHED_ANSWERS: 'cachedAnswers', // Key for the local storage cache
+        SMART_BLOCKER_DATA_KEY: 'smartBlockerWrongAnswers' // NEW: Key for Smart Blocker data
     },
 
     // Inter-script Message Types
@@ -31,7 +30,7 @@ const CONSTANTS = {
         SOLVER_STATUS_UPDATE: 'SOLVER_STATUS_UPDATE',        // Content Script -> Popup, Background -> Popup (optional)
         TRIGGER_SOLVER: 'TRIGGER_SOLVER',                    // Popup -> Content Script
         FETCH_SETTINGS_REQUEST: 'FETCH_SETTINGS_REQUEST',    // Content Script -> Background
-        REPORT_INCORRECT_ANSWER: 'REPORT_INCORRECT_ANSWER'   // Future: Content Script -> Background (for feedback)
+        REPORT_INCORRECT_ANSWER: 'REPORT_INCORRECT_ANSWER'   // NEW: Content Script -> Background (for feedback)
     },
 
     // Other configurations
