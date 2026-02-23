@@ -11,6 +11,45 @@ import { ErrorHandler } from './error_handler.js';
 
 class ApiClient {
     /**
+     * Adds random jitter so repeated retries from multiple requests don't align.
+     * @param {number} ms
+     * @returns {number}
+     */
+    static addJitter(ms) {
+        const jitter = Math.floor(Math.random() * 500);
+        return ms + jitter;
+    }
+
+    /**
+     * Reads retry delay hints from response headers/body.
+     * @param {Response} response
+     * @param {object} errorData
+     * @returns {number|null} Delay in ms.
+     */
+    static getRetryDelayMs(response, errorData) {
+        const retryAfterHeader = response.headers.get('retry-after');
+        if (retryAfterHeader) {
+            const retryAfterSeconds = Number(retryAfterHeader);
+            if (!Number.isNaN(retryAfterSeconds) && retryAfterSeconds > 0) {
+                return retryAfterSeconds * 1000;
+            }
+        }
+
+        const suggestedDelay = errorData?.error?.details?.find(detail =>
+            detail?.retryDelay
+        )?.retryDelay;
+
+        if (typeof suggestedDelay === 'string') {
+            const seconds = Number.parseFloat(suggestedDelay.replace('s', ''));
+            if (!Number.isNaN(seconds) && seconds > 0) {
+                return seconds * 1000;
+            }
+        }
+
+        return null;
+    }
+
+    /**
      * Calls the Google Gemini API with the provided prompt.
      * Implements basic retry logic for transient network issues.
      * @param {string} apiKey - The user's Google Gemini API key.
@@ -20,7 +59,7 @@ class ApiClient {
      * @returns {Promise<object>} The parsed JSON response from the Gemini API.
      * @throws {Error} If the API call fails after retries, or returns a non-OK status.
      */
-    static async callGeminiApi(apiKey, prompt, retries = 3, delay = 1000) {
+    static async callGeminiApi(apiKey, prompt, retries = 5, delay = 1500) {
         if (!apiKey) {
             throw new Error('APIClient: Gemini API Key is missing.');
         }
@@ -60,7 +99,7 @@ class ApiClient {
                     } else if (response.status === 401 || response.status === 403) {
                         errorMessage = `Gemini API Error: Invalid or Unauthorized API Key. Please check your key.`;
                     } else if (response.status === 429) {
-                        errorMessage = `Gemini API Error (429): Rate limit exceeded. Please wait and try again.`;
+                        errorMessage = `Gemini API Error (429): Rate limit exceeded. Retrying automatically...`;
                     } else if (errorData.error?.message) {
                         errorMessage = `Gemini API Error: ${errorData.error.message}`;
                     }
@@ -68,6 +107,7 @@ class ApiClient {
                     const error = new Error(errorMessage);
                     error.statusCode = response.status;
                     error.details = errorData; // Attach full error response for debugging
+                    error.retryDelayMs = ApiClient.getRetryDelayMs(response, errorData);
                     throw error;
                 }
 
@@ -80,9 +120,14 @@ class ApiClient {
             } catch (error) {
                 // Only retry for network errors or specific API transient errors (e.g., 429)
                 if (i < retries && (error instanceof TypeError || error.statusCode === 429 || error.statusCode >= 500)) {
-                    console.warn(`APIClient: Retrying API call (${i + 1}/${retries}). Error: ${error.message}`);
-                    await new Promise(res => setTimeout(res, delay * Math.pow(2, i))); // Exponential backoff
+                    const backoffDelay = error.retryDelayMs || delay * Math.pow(2, i);
+                    const waitMs = ApiClient.addJitter(Math.min(backoffDelay, 60000));
+                    console.warn(`APIClient: Retrying API call (${i + 1}/${retries}) in ${Math.round(waitMs / 1000)}s. Error: ${error.message}`);
+                    await new Promise(res => setTimeout(res, waitMs));
                 } else {
+                    if (error.statusCode === 429) {
+                        error.message = 'Gemini API Error (429): Rate limit exceeded after retries. Wait a minute and try again, or use a higher-quota API key.';
+                    }
                     ErrorHandler.logError('APIClient: Failed to call Gemini API after retries:', error);
                     throw error; // Re-throw the error if no more retries or non-retryable error
                 }
